@@ -4,6 +4,9 @@ local standaloneFrame = CreateFrame("Frame")
 local checkKeyInputFrame  = Test or CreateFrame("Frame", "Test", UIParent)
 local timerFrame = CreateFrame("Frame")
 local commFrame = CreateFrame("Frame")
+-- UI Frame
+sharedFrame = CreateFrame("Frame", "ProAPMSharedDisplay", UIParent, "BackdropTemplate")
+Mixin(sharedFrame, BackdropTemplateMixin)
 
 -- Check for "combat" events
 standaloneFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -23,52 +26,18 @@ local finalAPM = 0
 
 local throttle = 0
 
+
+-- Global Variables for UI && Options
 -- Other player data
-local otherPlayers = {}
+otherPlayers = {}
+sharedRows = {}
 
+-- Enable/Disable APM tracking
+apmEnabled = true
 
--- UI --
-
--- Local UI frame
-local apmFrame = CreateFrame("Frame", "APMTrackerFrame", UIParent)
-Mixin(apmFrame, BackdropTemplateMixin) -- Add this!
-apmFrame:SetSize(150, 40)
-apmFrame:SetPoint("CENTER")
-apmFrame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 8, right = 8, top = 8, bottom = 8 }
-})
-apmFrame:SetMovable(true)
-apmFrame:EnableMouse(true)
-apmFrame:RegisterForDrag("LeftButton")
-apmFrame:SetScript("OnDragStart", apmFrame.StartMoving)
-apmFrame:SetScript("OnDragStop", apmFrame.StopMovingOrSizing)
-apmFrame:Hide()
-
-local apmText = apmFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-apmText:SetPoint("CENTER")
-apmText:SetText("APM: 0")
-
--- Shared Display Frame
-local sharedFrame = CreateFrame("Frame", "ProAPMSharedDisplay", UIParent, "BackdropTemplate")
-Mixin(sharedFrame, BackdropTemplateMixin)
-
-sharedFrame:SetSize(200, 200)
-sharedFrame:SetPoint("RIGHT", -100, 0)
-sharedFrame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 8, right = 8, top = 8, bottom = 8 }
-})
-sharedFrame:SetMovable(true)
-sharedFrame:EnableMouse(true)
-sharedFrame:RegisterForDrag("LeftButton")
-sharedFrame:SetScript("OnDragStart", sharedFrame.StartMoving)
-sharedFrame:SetScript("OnDragStop", sharedFrame.StopMovingOrSizing)
-
-sharedFrame:Show()
-
+-- Options
+ProAPM_Settings = ProAPM_Settings or {}
+ProAPM_Settings.customYell = ProAPM_Settings.customYell or "Holy shit is that %d APM?!!!?"
 
 
 -- Events
@@ -103,6 +72,12 @@ standaloneFrame:SetScript("OnEvent", function(self, event)
         actions = 0
         combatStartTime = GetTime()
 
+        -- Should probably, hopefully, clear the entire table and be ready for new data
+        table.wipe(otherPlayers)
+        for _, row in ipairs(sharedRows) do
+            row:SetText("")
+        end
+
     elseif event == "PLAYER_REGEN_ENABLED" then
         inCombat = false
         elapsedTime = GetTime() - combatStartTime
@@ -111,14 +86,12 @@ standaloneFrame:SetScript("OnEvent", function(self, event)
         actions = 0
 
         if AreAllGroupMembersInSameGuild() then
-            SendChatMessage(string.format("Holy shit is that %d APM?!!!?", finalAPM), "YELL")
+            local yellText = ProAPM_Settings.customYell or "APM: %d"
+            SendChatMessage(string.format(yellText, finalAPM), "YELL")
         end
     end
 
 end)
-
-
-local sharedRows = {}
 
 local function UpdateSharedDisplay()
     local index = 1
@@ -160,13 +133,12 @@ end
 -- Update APM every second
 timerFrame:SetScript("OnUpdate", function(self, elapsed)
 
-    if inCombat then
+    if inCombat and apmEnabled then 
         throttle = throttle + elapsed
 
         if throttle > 1 then
             elapsedTime = GetTime() - combatStartTime
             currentAPM = actions / elapsedTime * 60
-            apmText:SetText("APM: " .. string.format("%d", currentAPM))
 
             otherPlayers[UnitName("player")] = currentAPM
             UpdateSharedDisplay()
@@ -186,7 +158,7 @@ end)
 -- Checks for keyboard input, if key is pressed, add +1 to actions 
 checkKeyInputFrame:SetScript("OnKeyDown", function(self, key)
 
-    if inCombat then
+    if inCombat and apmEnabled then
         actions = actions + 1
     end
 
