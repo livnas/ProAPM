@@ -44,7 +44,7 @@ apmFrame:EnableMouse(true)
 apmFrame:RegisterForDrag("LeftButton")
 apmFrame:SetScript("OnDragStart", apmFrame.StartMoving)
 apmFrame:SetScript("OnDragStop", apmFrame.StopMovingOrSizing)
-apmFrame:Show()
+apmFrame:Hide()
 
 local apmText = apmFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 apmText:SetPoint("CENTER")
@@ -58,7 +58,6 @@ sharedFrame:SetSize(200, 200)
 sharedFrame:SetPoint("RIGHT", -100, 0)
 sharedFrame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
     tile = true, tileSize = 32, edgeSize = 32,
     insets = { left = 8, right = 8, top = 8, bottom = 8 }
 })
@@ -74,23 +73,46 @@ sharedFrame:Show()
 
 -- Events
 
+local function AreAllGroupMembersInSameGuild()
+    if not IsInGroup() or not IsInGuild() then
+        return false
+    end
+
+    local myGuildName = GetGuildInfo("player")
+    if not myGuildName then return false end
+
+    local total = GetNumGroupMembers()
+    for i = 1, total do
+        local unit = IsInRaid() and "raid"..i or "party"..i
+        if UnitExists(unit) and UnitName(unit) ~= UnitName("player") then
+            local guild = GetGuildInfo(unit)
+            if guild ~= myGuildName then
+                return false
+            end
+        end
+    end
+
+    return true
+end
+
 -- Check if we entered combat or not
 standaloneFrame:SetScript("OnEvent", function(self, event)
 
     if event == "PLAYER_REGEN_DISABLED" then
-        print("You have entered combat!")
         inCombat = true
         actions = 0
         combatStartTime = GetTime()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        print("You have left combat.")
         inCombat = false
         elapsedTime = GetTime() - combatStartTime
         finalAPM = actions / elapsedTime * 60
-        print(string.format("You have left combat. Duration: %.1f seconds. Total APM: %d", elapsedTime, finalAPM))
         elapsedTime = 0
         actions = 0
+
+        if AreAllGroupMembersInSameGuild() then
+            SendChatMessage(string.format("Holy shit is that %d APM?!!!?", finalAPM), "YELL")
+        end
     end
 
 end)
@@ -101,7 +123,18 @@ local sharedRows = {}
 local function UpdateSharedDisplay()
     local index = 1
 
+    local sorted = {}
     for playerName, apm in pairs(otherPlayers) do
+        table.insert(sorted, { name = playerName, apm = apm })
+    end
+
+    table.sort(sorted, function(a, b)
+        return a.apm > b.apm
+    end)
+
+    -- Render sorted rows
+    local index = 1
+    for _, entry in ipairs(sorted) do
         local row = sharedRows[index]
 
         if not row then
@@ -110,7 +143,10 @@ local function UpdateSharedDisplay()
             sharedRows[index] = row
         end
 
-        row:SetText(playerName .. " : " .. string.format("%.1f", apm))
+        local shortName = Ambiguate(entry.name, "short")
+        local name = (shortName == UnitName("player") and "|cffffff00You|r" or shortName)
+
+        row:SetText(name .. " : " .. string.format("%d", entry.apm))
         index = index + 1
     end
 
@@ -161,11 +197,10 @@ checkKeyInputFrame:SetPropagateKeyboardInput(true)
 -- Check if we're in a party or raid, if yes, send data to other players using ProAPM
 commFrame:SetScript("OnEvent", function(self, event, prefix, msg, channel, sender)
 
-    if prefix == "ProAPM" and sender ~= UnitName("player") then
+    if prefix == "ProAPM" and Ambiguate(sender, "short") ~= UnitName("player") then
         local apm = tonumber(msg:match("APM:(%d+%.?%d*)"))
         if apm then
             otherPlayers[sender] = apm
-            print(string.format("%s's APM: %.2f", sender, apm))
             UpdateSharedDisplay()
         end
     end
