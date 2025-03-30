@@ -396,3 +396,10 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Ignore WoW-specific cache or saved data (if you ever include any)
+*.lua.bak
+*.log
+
+# Ignore zip/distribution builds
+*.zip
