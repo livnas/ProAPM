@@ -81,7 +81,13 @@ standaloneFrame:SetScript("OnEvent", function(self, event)
     elseif event == "PLAYER_REGEN_ENABLED" then
         inCombat = false
         elapsedTime = GetTime() - combatStartTime
-        finalAPM = actions / elapsedTime * 60
+
+        if elapsedTime and elapsedTime > 0 then
+            finalAPM = actions / elapsedTime * 60
+        else
+            finalAPM = 0
+        end
+
         elapsedTime = 0
         actions = 0
 
@@ -138,15 +144,31 @@ timerFrame:SetScript("OnUpdate", function(self, elapsed)
 
         if throttle > 1 then
             elapsedTime = GetTime() - combatStartTime
-            currentAPM = actions / elapsedTime * 60
+
+            if elapsedTime and elapsedTime > 0 then
+                currentAPM = actions / elapsedTime * 60
+            else
+                currentAPM = 0
+            end
 
             otherPlayers[UnitName("player")] = currentAPM
             UpdateSharedDisplay()
 
             if IsInGroup() then
                 local msg = string.format("APM:%.2f", currentAPM)
-                local channel = IsInRaid() and "RAID" or "PARTY"
-                C_ChatInfo.SendAddonMessage("ProAPM", msg, channel)
+
+                local channel
+                if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+                    channel = "INSTANCE_CHAT"
+                elseif IsInRaid() then
+                    channel = "RAID"
+                elseif IsInGroup() then
+                    channel = "PARTY"
+                end
+
+                if channel then
+                    C_ChatInfo.SendAddonMessage("ProAPM", msg, channel)
+                end
             end
 
             throttle = 0
